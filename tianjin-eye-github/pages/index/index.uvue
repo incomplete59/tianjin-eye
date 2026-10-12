@@ -1,0 +1,162 @@
+<template>
+  <view class="page" :class="{ night: night }" :style="themeStyle">
+    <view class="header">
+      <view class="status-bar" :style="{ height: statusBarHeight + 'px' }"></view>
+      <view class="navigation" :style="{ height: navigationHeight + 'px' }">
+        <text class="navigation-title">天津之眼</text>
+      </view>
+    </view>
+    <view class="content">
+    <view class="content-body">
+    <view class="intro">
+      <text class="eyebrow">一座可以放进口袋的天津</text>
+      <view class="title-row"><text class="title">天津之眼</text><text class="badge">3D 漫游</text></view>
+      <text class="subtitle">让海河慢下来，让摩天轮转起来。</text>
+    </view>
+    <view class="stage">
+      <tianjin-scene id="tianjin-canvas" class="scene" :night="night" :playing="playing" :speed="speed" :active="active" :reset-token="resetToken" :zoom-steps="zoomSteps" :reload-token="reloadToken" @ready="onReady" @sceneerror="onSceneError" @themechange="onThemeChange" />
+      <view v-if="!ready || error.length > 0" class="notice">
+        <text class="notice-text">{{ error.length > 0 ? error : '正在搭建你的迷你天津…' }}</text>
+        <button v-if="error.length > 0" class="retry" @click="retry">重新加载</button>
+      </view>
+      <text class="gesture">单指旋转 · 双指缩放</text>
+    </view>
+    <view class="panel">
+      <view class="row modes">
+        <button class="mode" :class="{ selected: !night }" @click="night = false">晴日漫游</button>
+        <button class="mode" :class="{ selected: night }" @click="night = true">星夜漫游</button>
+      </view>
+      <view class="row actions">
+        <button class="play" @click="playing = !playing">{{ playing ? '暂停转动' : '继续转动' }}</button>
+        <button class="small" @click="zoomSteps++">＋</button>
+        <button class="small" @click="zoomSteps--">－</button>
+        <button class="reset" @click="resetToken++">复位</button>
+      </view>
+      <view class="speed-row"><text class="label">转动速度</text><text class="value">{{ speed.toFixed(2) }}×</text></view>
+      <slider class="speed-slider" :value="speed * 100" :min="50" :max="300" :step="50" activeColor="#438e82" backgroundColor="#dbe6df" block-color="#438e82" :block-size="18" @changing="onSpeed" @change="onSpeed" />
+      <text class="footnote">永乐桥上，24 间彩色小座舱等你看风景。</text>
+    </view>
+    </view>
+    </view>
+  </view>
+</template>
+<script setup lang="ts">
+import { computed, getCurrentInstance, nextTick, watch } from 'vue'
+const pageInstance = getCurrentInstance()
+const night = ref(false)
+const playing = ref(true)
+const speed = ref(1)
+const active = ref(true)
+const resetToken = ref(0)
+const zoomSteps = ref(0)
+const reloadToken = ref(0)
+const ready = ref(false)
+const error = ref('')
+const themeBlend = ref(0)
+const statusBarHeight = ref(20)
+const navigationHeight = ref(44)
+onLoad(() => {
+  // Measure around the system capsule; do not replace or restyle it.
+  const info = uni.getWindowInfo()
+  statusBarHeight.value = info.statusBarHeight ?? 20
+  const capsule = uni.getMenuButtonBoundingClientRect()
+  if (capsule.height > 0) navigationHeight.value = Math.max(44, (capsule.top - statusBarHeight.value) * 2 + capsule.height)
+})
+function blendColor(day: string, evening: string): string {
+  const a = parseInt(day.slice(1), 16), b = parseInt(evening.slice(1), 16)
+  const t = themeBlend.value
+  const channel = (shift: number) => Math.round(((a >> shift) & 255) * (1 - t) + ((b >> shift) & 255) * t)
+  return 'rgb(' + channel(16) + ',' + channel(8) + ',' + channel(0) + ')'
+}
+const themeStyle = computed(() => ({
+  '--header-height': (statusBarHeight.value + navigationHeight.value) + 'px',
+  '--page-bg': blendColor('#e6f0e7', '#142637'),
+  '--page-text': blendColor('#294d46', '#f8e5c5'),
+  '--muted-text': blendColor('#6c8b80', '#a5b6bb'),
+  '--panel-bg': blendColor('#f7faf5', '#203746'),
+  '--badge-bg': blendColor('#d6e6db', '#304958'),
+  '--mode-bg': blendColor('#eaf0e9', '#304958'),
+  '--button-bg': blendColor('#e6eee6', '#304958'),
+  '--button-text': blendColor('#294d46', '#e8e8dc'),
+  '--selected-bg': blendColor('#438e82', '#c39158'),
+  '--footnote-text': blendColor('#8a9e91', '#a5b6bb')
+}))
+function onThemeChange(event: any) {
+  const progress = Number(event.detail.progress)
+  if (Number.isFinite(progress)) themeBlend.value = Math.max(0, Math.min(1, progress))
+}
+// The native component also accepts an explicit snapshot. This avoids relying
+// solely on the generated u-p property bridge for imperative WebGL state.
+function syncScene() {
+  // #ifdef MP-WEIXIN
+  const proxy: any = pageInstance?.proxy
+  const scope: any = proxy?.$scope
+  const component: any = scope?.selectComponent('#tianjin-canvas')
+  if (component != null && typeof component.applyState === 'function') {
+    component.applyState({ night: night.value, playing: playing.value, speed: speed.value,
+      active: active.value, resetToken: resetToken.value, zoomSteps: zoomSteps.value, reloadToken: reloadToken.value })
+  }
+  // #endif
+}
+watch([night, playing, speed, active, resetToken, zoomSteps, reloadToken], () => { nextTick(syncScene) }, { flush: 'post' })
+function onReady() { ready.value = true; error.value = ''; nextTick(syncScene) }
+function onSceneError(event: any) { error.value = event.detail.message || '3D 画面暂时无法显示'; ready.value = false }
+function onSpeed(event: any) {
+  speed.value = Math.max(.5, Math.min(3, Math.round(Number(event.detail.value) / 50) * .5))
+  syncScene()
+}
+function retry() { error.value = ''; ready.value = false; reloadToken.value++ }
+onShow(() => { active.value = true; nextTick(syncScene) })
+onHide(() => { active.value = false })
+onShareAppMessage(() => ({ title: '来转转这座 Q 版天津之眼', path: '/pages/index/index' }))
+</script>
+<style>
+.page { height: 100vh; overflow: hidden; box-sizing: border-box; padding-top: var(--header-height); background-color: var(--page-bg); color: var(--page-text); }
+.content { height: 100%; width: 100%; }
+.content-body { height: 100%; box-sizing: border-box; display: flex; flex-direction: column; padding-bottom: calc(10px + env(safe-area-inset-bottom)); }
+.header { position: fixed; top: 0; left: 0; right: 0; z-index: 20; background-color: var(--page-bg); }
+.status-bar { background-color: #e6f0e7; }
+.navigation { display: flex; flex-direction: row; align-items: center; justify-content: center; background-color: var(--page-bg); }
+.navigation-title { font-size: 17px; font-weight: 500; color: var(--page-text); }
+.intro { flex-shrink: 0; padding: 18px 24px 0; }
+.eyebrow { font-size: 11px; letter-spacing: 2px; color: #6c8b80; }
+.title-row { display: flex; flex-direction: row; align-items: center; margin-top: 8px; }
+.title { font-size: 34px; font-weight: 800; letter-spacing: 3px; }
+.badge { margin-left: 12px; font-size: 10px; padding: 5px 9px; border-radius: 20px; background-color: #d6e6db; }
+.subtitle { display: block; font-size: 12px; margin-top: 8px; color: #6c8b80; }
+.stage { position: relative; flex: 1; min-height: 0; width: 100%; }
+.scene { display: block; width: 100%; height: 100%; }
+.gesture { position: absolute; bottom: 10px; left: 0; width: 100%; text-align: center; font-size: 11px; color: #6c8b80; }
+.notice { position: absolute; top: 40%; left: 24px; right: 24px; padding: 18px; border-radius: 18px; background-color: #ffffff; }
+.notice-text { display: block; text-align: center; font-size: 13px; color: #294d46; }
+.retry { margin-top: 12px; font-size: 13px; color: #ffffff; background-color: #438e82; }
+.panel { flex-shrink: 0; margin: 8px 18px 0; padding: 14px 16px; border-radius: 24px; background-color: #f7faf5; }
+.row { display: flex; flex-direction: row; align-items: center; }
+.modes { gap: 8px; }
+.mode { flex: 1; margin: 0; padding: 0; font-size: 13px; line-height: 40px; color: #6c8b80; background-color: #eaf0e9; border-radius: 13px; }
+.selected { color: #ffffff; background-color: #438e82; }
+.actions { margin-top: 8px; gap: 8px; }
+.play { flex: 1; margin: 0; padding: 0; line-height: 40px; font-size: 13px; color: #294d46; background-color: #e6eee6; border-radius: 13px; }
+.small { width: 40px; margin: 0; padding: 0; line-height: 40px; font-size: 20px; color: #294d46; background-color: #e6eee6; border-radius: 13px; }
+.reset { width: 48px; margin: 0; padding: 0; line-height: 40px; font-size: 12px; color: #294d46; background-color: #e6eee6; border-radius: 13px; }
+.speed-row { display: flex; flex-direction: row; justify-content: space-between; margin-top: 12px; }
+.speed-slider { margin: 8px 0; }
+.label, .value { font-size: 11px; color: #6c8b80; }
+.footnote { display: block; font-size: 10px; text-align: center; color: #8a9e91; }
+.panel { background-color: var(--panel-bg); }
+.eyebrow, .subtitle, .gesture, .label, .value { color: var(--muted-text); }
+.badge { background-color: var(--badge-bg); }
+.mode { background-color: var(--mode-bg); color: var(--muted-text); }
+.play, .small, .reset { background-color: var(--button-bg); color: var(--button-text); }
+.selected { background-color: var(--selected-bg); color: #ffffff; }
+.footnote { color: var(--footnote-text); }
+@media (max-height: 700px) {
+  .intro { padding-top: 10px; }
+  .title { font-size: 28px; }
+  .title-row { margin-top: 4px; }
+  .subtitle { margin-top: 4px; }
+  .panel { padding: 10px 14px; }
+  .mode, .play, .small, .reset { line-height: 36px; }
+  .speed-row { margin-top: 8px; }
+}
+</style>

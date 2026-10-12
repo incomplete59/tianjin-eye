@@ -1,0 +1,4 @@
+<script setup lang="ts">
+onLaunch(() => { console.info("天津之眼启动") })
+</script>
+<style>page { background-color: #e6f0e7; font-family: sans-serif; } button::after { border: none; }</style>

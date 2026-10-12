@@ -1,0 +1,20 @@
+{
+  "pages": [
+    {
+      "path": "pages/index/index",
+      "style": {
+        "navigationBarTitleText": "天津之眼",
+        "navigationStyle": "custom",
+        "disableScroll": true,
+        "usingComponents": {
+          "tianjin-scene": "/wxcomponents/tianjin-scene/index"
+        }
+      }
+    }
+  ],
+  "globalStyle": {
+    "navigationBarTextStyle": "black",
+    "navigationBarBackgroundColor": "#e6f0e7",
+    "backgroundColor": "#e6f0e7"
+  }
+}
